@@ -11,7 +11,8 @@ from pathlib import Path
 
 TIENDAS = (1, 2)
 FAMILIAS = ("BEVERAGES", "PRODUCE")
-INICIO = date(2016, 12, 1)
+# Más de un año: suficiente para entrenar el modelo de ML.
+INICIO = date(2016, 1, 4)
 FIN = date(2017, 5, 15)
 
 
