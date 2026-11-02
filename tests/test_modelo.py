@@ -362,7 +362,17 @@ def test_se_reproduce_una_publicacion_del_modelo(rutas, artefacto):
     _con_decision(rutas, CORTE, CORTE.isoformat(), artefacto)
     version = Version(CORTE, CORTE)
     _publicar(rutas, version)
-    assert publicacion.reproducir(rutas, version) == {"pronostico.csv": True, "pedido.csv": True}
+    assert publicacion.reproducir(rutas, version) == {"modelo": True, "pronostico.csv": True, "pedido.csv": True}
+
+
+def test_reproducir_avisa_si_el_modelo_no_se_puede_cargar(rutas, artefacto, capsys):
+    _con_decision(rutas, CORTE, CORTE.isoformat(), artefacto)
+    version = Version(CORTE, CORTE)
+    _publicar(rutas, version)
+    (rutas.modelos / CORTE.isoformat() / "modelo.joblib").write_bytes(b"no es un modelo")
+    assert publicacion.reproducir(rutas, version)["modelo"] is False
+    assert publicacion.main(["--corte", CORTE.isoformat(), "--raiz", str(rutas.raiz)]) == 1
+    assert "instala las dependencias" in capsys.readouterr().out
 
 
 def test_con_datos_preparados_predice_igual_que_con_toda_la_historia(rutas, artefacto, entradas):
