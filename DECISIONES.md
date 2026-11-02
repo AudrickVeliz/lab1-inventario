@@ -338,3 +338,27 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 **Justificación:** una falla del modelo no debe dejar a una tienda sin pedido. Es una situación de operación, no un dato inválido.
 
 **Alternativa:** detener la publicación, que deja sin recomendación a todas las tiendas.
+
+## D-023: aceptar el modelo con una mejora en costo no concluyente
+
+**Fecha:** 2026-11-02
+
+**Contexto:** el periodo de seguimiento, que no se usó para elegir el modelo, tiene 19 cortes con semana completa.
+
+| Métrica | Publicado | Baseline | Cortes donde gana lo publicado |
+|---|---|---|---|
+| WAPE del cuantil 0.50 | 0.140 | 0.150 | 12 de 19 |
+| Cobertura del intervalo 0.10 a 0.90 | 76.9% | 70.9% | 19 de 19 |
+| Costo de negocio | 17,046,687 (-2.0%) | 17,401,970 | 9 de 19 |
+
+**Decisión:** aceptar el modelo y no ajustarlo con estos resultados.
+
+**Justificación:** mejora con claridad la precisión y la cobertura, que era la debilidad medida del baseline. Ajustarlo ahora para ganar en estos cortes invalidaría la única medición independiente.
+
+**Limitaciones reconocidas:**
+- **Costo:** casi todo el ahorro viene del corte del 2017-05-29; sin él, el modelo cuesta 0.2% más. Al remuestrear los cortes, el intervalo de 95% de la diferencia va de -1,495,922 a 695,171 e incluye el cero.
+- **Supuestos:** el costo depende de valores supuestos, porque Kaggle no trae precios ni márgenes.
+- **Modelo de julio:** reemplazó al de abril con 12.5% de mejora en su validación, y en sus 3 cortes completos costó 3.9% más que el baseline. Son muy pocos cortes para concluir.
+- **Modelo de abril:** siguió vigente en mayo y junio. Parte con ventaja, porque ya vio parte de los cortes de evaluación (D-021).
+
+**Alternativa:** seguir ajustando el modelo solo con la carga histórica. No garantiza una mejora en costo y retrasa una entrega que ya pasó de su plazo.
