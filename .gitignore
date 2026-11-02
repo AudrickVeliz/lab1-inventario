@@ -11,6 +11,10 @@ models/**
 !data/**/.gitkeep
 !models/**/.gitkeep
 
+# Archivos de la carpeta de trabajo que no forman parte del producto
+/Laboratorio_1_PD_26.pdf
+*.zip
+
 # Credenciales y configuración local
 .env
 kaggle.json
