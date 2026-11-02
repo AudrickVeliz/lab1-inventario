@@ -123,14 +123,14 @@ El modelo mejora con claridad la precisión y la cobertura. **La mejora en costo
 
 ### Reproducción de un pronóstico pasado con DVC
 
-Desde un clon limpio. El remoto es una carpeta que no va en Git, así que hay que colocarla junto al clon. Los comandos usan Podman; con Docker son equivalentes.
+Desde un clon limpio, con DVC instalado (`pip install dvc==3.67.1`) y la imagen ya construida. El remoto es una carpeta que no va en Git, así que hay que colocarla junto al clon. Los comandos usan Podman; con Docker son equivalentes.
 
 ```
 git clone https://github.com/AudrickVeliz/lab1-inventario.git
 cd lab1-inventario
 cp -r <proyecto-original>/dvc-remote dvc-remote
 dvc pull data/historico.dvc data/bandeja.dvc data/modelos.dvc data/publicados.dvc
-podman run --rm --entrypoint python -e PYTHONPATH=/opt/rep/src -v .:/opt/rep \
+podman run --rm --entrypoint python -e PYTHONPATH=/opt/rep/src -v "$(pwd)":/opt/rep \
   inventario-airflow:3.3.2 -m inventario.publicacion --corte 2017-06-05 --raiz /opt/rep
 ```
 
