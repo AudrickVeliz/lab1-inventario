@@ -1,38 +1,74 @@
-# Reglas de disponibilidad de cada fuente. Kaggle no trae fechas de llegada:
-# estos valores son supuestos del producto (ver DECISIONES.md, D-003).
+# Reglas de cada fuente: cuándo llega (DECISIONES.md, D-003) y qué la hace válida (D-007).
 
 # Lo que ya había llegado en esta fecha forma la carga histórica;
 # lo que llega después se entrega por la bandeja.
 corte_historico: 2017-03-31
 
+# Una venta mayor que este múltiplo de la mediana de su serie genera un aviso,
+# pero se conserva: en los datos originales existen picos así.
+umbral_venta_sobre_mediana: 100
+
 fuentes:
+  # Las tiendas se procesan primero: las demás fuentes se validan contra este catálogo.
+  # No tiene fechas: solo entra en la carga histórica o como archivo suelto si cambia.
+  stores:
+    columnas:
+      store_nbr: entero
+      city: texto
+      state: texto
+      type: texto
+      cluster: entero
+    columna_fecha: null
+    clave: [store_nbr]
+
   train:
-    columnas: [id, date, store_nbr, family, sales, onpromotion]
+    columnas:
+      id: entero
+      date: fecha
+      store_nbr: entero
+      family: texto
+      sales: decimal
+      onpromotion: entero
     columna_fecha: date
+    clave: [date, store_nbr, family]
+    no_negativas: [sales, onpromotion]
     retraso_dias: 1
     calendario: natural
 
   transactions:
-    columnas: [date, store_nbr, transactions]
+    columnas:
+      date: fecha
+      store_nbr: entero
+      transactions: entero
     columna_fecha: date
+    clave: [date, store_nbr]
+    no_negativas: [transactions]
     retraso_dias: 2
     calendario: natural
 
   # El viernes se entrega el lunes: los fines de semana no hay entregas.
+  # Un precio vacío es una situación esperada.
   oil:
-    columnas: [date, dcoilwtico]
+    columnas:
+      date: fecha
+      dcoilwtico: decimal
     columna_fecha: date
+    clave: [date]
+    no_negativas: [dcoilwtico]
+    anulables: [dcoilwtico]
     retraso_dias: 1
     calendario: habil
 
   # Un retraso negativo es anticipación: el evento se conoce 30 días antes.
   holidays_events:
-    columnas: [date, type, locale, locale_name, description, transferred]
+    columnas:
+      date: fecha
+      type: texto
+      locale: texto
+      locale_name: texto
+      description: texto
+      transferred: booleano
     columna_fecha: date
+    clave: [date, type, locale, locale_name, description]
     retraso_dias: -30
     calendario: natural
-
-  # Catálogo sin fechas: solo entra en la carga histórica.
-  stores:
-    columnas: [store_nbr, city, state, type, cluster]
-    columna_fecha: null

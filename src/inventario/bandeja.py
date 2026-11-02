@@ -4,7 +4,7 @@ Cada archivo se llama ``<fuente>/<fecha_dato>__<fecha_entrega>.csv``. Una correc
 es un archivo nuevo con la misma fecha del dato y una entrega posterior.
 
 La generación (``generar``) representa al sistema externo. La lectura
-(``archivos_disponibles``) es lo que usa el flujo y nunca escribe en la bandeja.
+(``versiones_disponibles``) es lo que usa el flujo y nunca escribe en la bandeja.
 """
 
 from __future__ import annotations
@@ -36,15 +36,23 @@ class ConflictoBandeja(ValueError):
 @dataclass(frozen=True)
 class ReglaFuente:
     nombre: str
-    columnas: tuple[str, ...]
+    tipos: dict[str, str]
     columna_fecha: str | None
+    clave: tuple[str, ...]
+    no_negativas: tuple[str, ...] = ()
+    anulables: tuple[str, ...] = ()
     retraso_dias: int = 0
     calendario: str = "natural"
+
+    @property
+    def columnas(self) -> tuple[str, ...]:
+        return tuple(self.tipos)
 
 
 @dataclass(frozen=True)
 class Configuracion:
     corte_historico: date
+    umbral_venta_sobre_mediana: float
     fuentes: dict[str, ReglaFuente]
 
 
@@ -71,12 +79,19 @@ def cargar_configuracion(ruta: Path) -> Configuracion:
             raise ValueError(f"{nombre}: calendario desconocido {calendario!r}")
         fuentes[nombre] = ReglaFuente(
             nombre=nombre,
-            columnas=tuple(regla["columnas"]),
+            tipos=dict(regla["columnas"]),
             columna_fecha=regla["columna_fecha"],
+            clave=tuple(regla["clave"]),
+            no_negativas=tuple(regla.get("no_negativas", ())),
+            anulables=tuple(regla.get("anulables", ())),
             retraso_dias=regla.get("retraso_dias", 0),
             calendario=calendario,
         )
-    return Configuracion(corte_historico=datos["corte_historico"], fuentes=fuentes)
+    return Configuracion(
+        corte_historico=datos["corte_historico"],
+        umbral_venta_sobre_mediana=datos["umbral_venta_sobre_mediana"],
+        fuentes=fuentes,
+    )
 
 
 def fecha_entrega(regla: ReglaFuente, fecha_dato: date) -> date:
@@ -203,21 +218,16 @@ def nombres_invalidos(bandeja: Path, fuente: str) -> list[Path]:
     return [r for r in _archivos(bandeja, fuente) if parsear_nombre(r, fuente) is None]
 
 
-def archivos_disponibles(bandeja: Path, fuente: str, fecha_corte: date) -> list[ArchivoBandeja]:
-    """Versión vigente de cada fecha del dato, con lo que había llegado a ``fecha_corte``.
+def versiones_disponibles(bandeja: Path, fuente: str, fecha_corte: date) -> list[ArchivoBandeja]:
+    """Todas las versiones entregadas hasta ``fecha_corte``, de la más antigua a la más nueva.
 
     Este filtro es la barrera contra la fuga de información: lo entregado después
-    de la fecha de corte no existe para quien pregunta en esa fecha.
+    de la fecha de corte no existe para quien pregunta en esa fecha. Se devuelven
+    todas las versiones porque una corrección puede traer solo algunas filas.
     """
-    vigentes: dict[date, ArchivoBandeja] = {}
-    for ruta in _archivos(bandeja, fuente):
-        archivo = parsear_nombre(ruta, fuente)
-        if archivo is None or archivo.fecha_entrega > fecha_corte:
-            continue
-        actual = vigentes.get(archivo.fecha_dato)
-        if actual is None or archivo.fecha_entrega > actual.fecha_entrega:
-            vigentes[archivo.fecha_dato] = archivo
-    return [vigentes[fecha] for fecha in sorted(vigentes)]
+    archivos = (parsear_nombre(ruta, fuente) for ruta in _archivos(bandeja, fuente))
+    disponibles = [a for a in archivos if a is not None and a.fecha_entrega <= fecha_corte]
+    return sorted(disponibles, key=lambda a: (a.fecha_entrega, a.fecha_dato))
 
 
 def main(argumentos: list[str] | None = None) -> int:
