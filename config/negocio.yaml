@@ -13,6 +13,19 @@ baseline:
   # Un bloque con menos días observados no se usa para estimar el total del periodo.
   dias_minimos_por_bloque: 6
 
+# Modelo de ML y criterio para reemplazar al vigente (DECISIONES.md, D-020 y D-021).
+modelo:
+  reentrenar_cada_cortes: 4
+  # Cortes pasados que usa cada entrenamiento: dos años en total.
+  semanas_totales: 104
+  # De los más recientes, estos calculan los errores y estos comparan los modelos.
+  semanas_calibracion: 12
+  semanas_evaluacion: 8
+  # Sin estas semanas para entrenar, sigue el modelo vigente.
+  semanas_minimas_entrenamiento: 26
+  # Un candidato reemplaza al vigente si baja el costo al menos esta proporción.
+  mejora_minima_costo: 0.02
+
 # Cuantiles diarios que se publican.
 cuantiles: [0.10, 0.50, 0.90]
 

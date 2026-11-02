@@ -21,6 +21,16 @@ class GrupoCosto:
 
 
 @dataclass(frozen=True)
+class ConfigModelo:
+    reentrenar_cada_cortes: int
+    semanas_totales: int
+    semanas_calibracion: int
+    semanas_evaluacion: int
+    semanas_minimas_entrenamiento: int
+    mejora_minima_costo: float
+
+
+@dataclass(frozen=True)
 class ConfigNegocio:
     dia_semana_corte: int
     horizonte_dias: int
@@ -30,6 +40,7 @@ class ConfigNegocio:
     grupos: dict[str, GrupoCosto]
     familia_a_grupo: dict[str, str]
     grupo_predeterminado: str
+    modelo: ConfigModelo
 
     def grupo_de(self, familia: str) -> GrupoCosto:
         """Una familia no listada, incluida una nueva, usa el grupo predeterminado."""
@@ -72,4 +83,5 @@ def cargar_negocio(ruta: Path) -> ConfigNegocio:
         grupos=grupos,
         familia_a_grupo=familia_a_grupo,
         grupo_predeterminado=predeterminado,
+        modelo=ConfigModelo(**datos["modelo"]),
     )

@@ -76,6 +76,8 @@ jobs:
           test -f data/publicados/2017-04-03/2017-04-03/metadatos.json
           grep -q "Seguimiento del desempeño" data/seguimiento/reporte.md
           test -f data/publicados.dvc
+          test -f data/modelos.dvc
+          jq -e 'has("vigente") and has("motivo")' data/modelos/2017-04-03/decision.json
           test -n "$(ls -A dvc-remote)"
 
       - name: Reproducir una publicación

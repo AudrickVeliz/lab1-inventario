@@ -23,13 +23,19 @@ from pathlib import Path
 import pandas as pd
 
 from inventario.bandeja import Configuracion, cargar_configuracion
+from inventario.entrenamiento import cargar_modelo, entradas_desde_tablas, vigente_para
 from inventario.ingesta import escribir_reporte, ingerir
+from inventario.modelo import Entradas, calcular_pedido_ml, pronosticar_ml
 from inventario.negocio import ConfigNegocio, cargar_negocio
 from inventario.pedido import calcular_pedido
 from inventario.pronostico import pronosticar_baseline, ventana_reciente, ventas_conocidas
+from inventario.rutas import Rutas
+
+__all__ = ["MODELO", "MODELO_ML", "Rutas", "Version", "listar_publicaciones", "preparar_version", "publicar_version", "reproducir"]
 
 MODELO = "baseline_mediana"
-_COLUMNAS_VENTAS = ["date", "store_nbr", "family", "sales"]
+MODELO_ML = "gradient_boosting"
+_DIAS_DE_PETROLEO = 60
 
 
 @dataclass(frozen=True, order=True)
@@ -50,47 +56,6 @@ class Version:
         return Path(self.corte.isoformat()) / self.conocimiento.isoformat()
 
 
-@dataclass(frozen=True)
-class Rutas:
-    raiz: Path
-
-    @property
-    def kaggle(self) -> Path:
-        return self.raiz / "data" / "kaggle"
-
-    @property
-    def bandeja(self) -> Path:
-        return self.raiz / "data" / "bandeja"
-
-    @property
-    def historico(self) -> Path:
-        return self.raiz / "data" / "historico"
-
-    @property
-    def procesados(self) -> Path:
-        return self.raiz / "data" / "procesados"
-
-    @property
-    def publicados(self) -> Path:
-        return self.raiz / "data" / "publicados"
-
-    @property
-    def seguimiento(self) -> Path:
-        return self.raiz / "data" / "seguimiento"
-
-    @property
-    def reportes(self) -> Path:
-        return self.raiz / "data" / "reportes"
-
-    @property
-    def config_fuentes(self) -> Path:
-        return self.raiz / "config" / "fuentes.yaml"
-
-    @property
-    def config_negocio(self) -> Path:
-        return self.raiz / "config" / "negocio.yaml"
-
-
 def _md5(contenido: bytes) -> str:
     return hashlib.md5(contenido).hexdigest()
 
@@ -107,35 +72,75 @@ def _version_codigo(raiz: Path) -> str:
     return resultado.stdout.strip()
 
 
-def _ventas_a_csv(ventas: pd.DataFrame) -> bytes:
-    return ventas.to_csv(index=False, lineterminator="\n", date_format="%Y-%m-%d").encode("utf-8")
+def _a_csv(tabla: pd.DataFrame) -> bytes:
+    return tabla.to_csv(index=False, lineterminator="\n", date_format="%Y-%m-%d").encode("utf-8")
 
 
-def _leer_ventas(contenido: bytes) -> pd.DataFrame:
-    return pd.read_csv(io.BytesIO(contenido), parse_dates=["date"])
+def _a_json(datos: dict) -> bytes:
+    return (json.dumps(datos, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
-def _preparar(rutas: Rutas, version: Version, fuentes: Configuracion, negocio: ConfigNegocio) -> tuple[bytes, bytes, dict, object]:
+def _preparar(rutas: Rutas, version: Version, fuentes: Configuracion, negocio: ConfigNegocio) -> tuple[dict[str, bytes], dict, object]:
     """Datos para el modelo: solo lo entregado hasta ``conocimiento`` y vendido antes del corte."""
     tablas, reporte = ingerir(rutas.bandeja, rutas.historico, version.conocimiento, fuentes)
-    conocidas = ventas_conocidas(tablas["train"], version.corte)
-    ventana = ventana_reciente(conocidas, negocio.semanas_baseline, negocio.horizonte_dias)
-    ventas = _ventas_a_csv(ventana[_COLUMNAS_VENTAS])
-    tiendas = tablas["stores"][["store_nbr"]].to_csv(index=False, lineterminator="\n").encode("utf-8")
+    entradas = entradas_desde_tablas(tablas, fuentes)
+    conocidas = ventas_conocidas(entradas.ventas, version.corte)
+    corte = pd.Timestamp(version.corte)
+    fin = corte + pd.Timedelta(days=negocio.horizonte_dias)
+    archivos = {
+        "ventas.csv": _a_csv(ventana_reciente(conocidas, negocio.semanas_baseline, negocio.horizonte_dias)),
+        "tiendas.csv": _a_csv(entradas.tiendas),
+        "feriados.csv": _a_csv(entradas.feriados[entradas.feriados["date"].between(corte, fin)]),
+        "petroleo.csv": _a_csv(entradas.petroleo[entradas.petroleo["date"] >= corte - pd.Timedelta(days=_DIAS_DE_PETROLEO)]),
+    }
     contexto = {
         "ultima_fecha_por_fuente": {f: e.ultima_fecha_dato for f, e in reporte.fuentes.items()},
         "archivos_en_cuarentena": [asdict(a) for a in reporte.cuarentena],
         "avisos": len(reporte.avisos),
     }
-    return ventas, tiendas, contexto, reporte
+    return archivos, contexto, reporte
 
 
-def _calcular(ventas_csv: bytes, tiendas_csv: bytes, version: Version, negocio: ConfigNegocio) -> tuple[bytes, bytes]:
-    ventas = _leer_ventas(ventas_csv)
-    tiendas = pd.read_csv(io.BytesIO(tiendas_csv))["store_nbr"].tolist()
-    pronostico = pronosticar_baseline(ventas, tiendas, version.corte, negocio)
-    pedido = calcular_pedido(ventas, tiendas, version.corte, negocio)
-    return _ventas_a_csv(pronostico), _ventas_a_csv(pedido)
+def _leer_entradas(archivos: dict[str, bytes]) -> Entradas:
+    def leer(nombre, **opciones):
+        return pd.read_csv(io.BytesIO(archivos[nombre]), **opciones)
+
+    return Entradas(
+        ventas=leer("ventas.csv", parse_dates=["date"]),
+        tiendas=leer("tiendas.csv"),
+        feriados=leer("feriados.csv", parse_dates=["date"]),
+        petroleo=leer("petroleo.csv", parse_dates=["date", "entrega"]),
+    )
+
+
+def _calcular(
+    rutas: Rutas,
+    archivos: dict[str, bytes],
+    version: Version,
+    negocio: ConfigNegocio,
+) -> tuple[bytes, bytes, dict]:
+    """Calcula con el modelo vigente en el corte. Si el modelo falla, se publica con el baseline."""
+    entradas = _leer_entradas(archivos)
+    vigente = vigente_para(rutas, version.corte)
+    info = {"modelo": MODELO, "modelo_entrenado": None}
+    if vigente is not None:
+        try:
+            artefacto = cargar_modelo(rutas, vigente)
+            pronostico = pronosticar_ml(artefacto, entradas, version.corte, negocio)
+            pedido = calcular_pedido_ml(artefacto, entradas, version.corte, negocio)
+        except Exception as error:  # noqa: BLE001 - una falla del modelo no debe dejar a la tienda sin pedido.
+            info["falla_del_modelo"] = f"{vigente}: {type(error).__name__}"
+        else:
+            info |= {
+                "modelo": MODELO_ML,
+                "modelo_entrenado": vigente,
+                "md5_modelo": _md5((rutas.modelos / vigente / "modelo.joblib").read_bytes()),
+            }
+            return _a_csv(pronostico), _a_csv(pedido), info
+    tiendas = entradas.tiendas["store_nbr"].tolist()
+    pronostico = pronosticar_baseline(entradas.ventas, tiendas, version.corte, negocio)
+    pedido = calcular_pedido(entradas.ventas, tiendas, version.corte, negocio)
+    return _a_csv(pronostico), _a_csv(pedido), info
 
 
 def _escribir_atomico(ruta: Path, contenido: bytes) -> None:
@@ -149,16 +154,22 @@ def preparar_version(rutas: Rutas, version: Version) -> None:
     """Valida, ingiere y deja los datos listos para el modelo. Es idempotente."""
     fuentes = cargar_configuracion(rutas.config_fuentes)
     negocio = cargar_negocio(rutas.config_negocio)
-    ventas, tiendas, contexto, reporte = _preparar(rutas, version, fuentes, negocio)
+    archivos, contexto, reporte = _preparar(rutas, version, fuentes, negocio)
     escribir_reporte(reporte, rutas.reportes / "ingesta")
     carpeta = rutas.procesados / version.relativa
-    _escribir_atomico(carpeta / "ventas.csv.gz", gzip.compress(ventas, mtime=0))
-    _escribir_atomico(carpeta / "tiendas.csv", tiendas)
+    for nombre, contenido in archivos.items():
+        if nombre == "ventas.csv":
+            _escribir_atomico(carpeta / "ventas.csv.gz", gzip.compress(contenido, mtime=0))
+        else:
+            _escribir_atomico(carpeta / nombre, contenido)
     _escribir_atomico(carpeta / "contexto.json", _a_json(contexto))
 
 
-def _a_json(datos: dict) -> bytes:
-    return (json.dumps(datos, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+def _leer_procesados(carpeta: Path) -> dict[str, bytes]:
+    return {
+        "ventas.csv": gzip.decompress((carpeta / "ventas.csv.gz").read_bytes()),
+        **{n: (carpeta / n).read_bytes() for n in ("tiendas.csv", "feriados.csv", "petroleo.csv")},
+    }
 
 
 def publicar_version(rutas: Rutas, version: Version) -> bool:
@@ -172,17 +183,16 @@ def publicar_version(rutas: Rutas, version: Version) -> bool:
         return False
     negocio = cargar_negocio(rutas.config_negocio)
     carpeta = rutas.procesados / version.relativa
-    ventas = gzip.decompress((carpeta / "ventas.csv.gz").read_bytes())
-    tiendas = (carpeta / "tiendas.csv").read_bytes()
+    archivos = _leer_procesados(carpeta)
     contexto = json.loads((carpeta / "contexto.json").read_text(encoding="utf-8"))
-    pronostico, pedido = _calcular(ventas, tiendas, version, negocio)
+    pronostico, pedido, info_modelo = _calcular(rutas, archivos, version, negocio)
 
     metadatos = {
         **version.a_dict(),
         **contexto,
-        "modelo": MODELO,
+        **info_modelo,
         "version_codigo": _version_codigo(rutas.raiz),
-        "md5_datos_preparados": _md5(ventas),
+        "md5_datos_preparados": _md5(b"".join(archivos[n] for n in sorted(archivos))),
         "md5_config_fuentes": _md5(rutas.config_fuentes.read_bytes()),
         "md5_config_negocio": _md5(rutas.config_negocio.read_bytes()),
     }
@@ -211,11 +221,11 @@ def listar_publicaciones(rutas: Rutas) -> list[Version]:
 
 
 def reproducir(rutas: Rutas, version: Version) -> dict[str, bool]:
-    """Recalcula una publicación desde los datos y compara el resultado byte a byte."""
+    """Recalcula una publicación desde los datos y el modelo, y compara el resultado byte a byte."""
     fuentes = cargar_configuracion(rutas.config_fuentes)
     negocio = cargar_negocio(rutas.config_negocio)
-    ventas, tiendas, _, _ = _preparar(rutas, version, fuentes, negocio)
-    pronostico, pedido = _calcular(ventas, tiendas, version, negocio)
+    archivos, _, _ = _preparar(rutas, version, fuentes, negocio)
+    pronostico, pedido, _ = _calcular(rutas, archivos, version, negocio)
     carpeta = rutas.publicados / version.relativa
     return {
         "pronostico.csv": (carpeta / "pronostico.csv").read_bytes() == pronostico,

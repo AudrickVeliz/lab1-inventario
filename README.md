@@ -28,8 +28,9 @@ Para usar otras credenciales, define `AIRFLOW_USER` y `AIRFLOW_PASSWORD` en el e
 | `data/historico/` | Lo que ya había llegado el 2017-03-31 |
 | `data/bandeja/<fuente>/` | Un archivo por fecha y fuente, tratado como sistema externo |
 | `data/procesados/<corte>/<conocimiento>/` | Datos preparados para el modelo |
+| `data/modelos/<fecha>/` | La decisión de cada entrenamiento y, si hubo reemplazo, el modelo |
 | `data/publicados/<corte>/<conocimiento>/` | `pronostico.csv`, `pedido.csv` y `metadatos.json`; nunca se reescriben |
-| `data/seguimiento/` | `reporte.md` y `desempeno.csv`: lo publicado frente a las ventas reales |
+| `data/seguimiento/` | `reporte.md`, `desempeno.csv` y `comparacion_modelos.csv`: lo publicado frente a las ventas reales y al baseline |
 | `data/reportes/ingesta/` | Archivos en cuarentena y avisos de cada fecha |
 
 En `data/publicados/`, `<corte>` es el lunes de emisión y `<conocimiento>` es la fecha de lo que se conocía al calcular. La publicación original tiene ambas iguales. El flujo versiona todo con DVC en cada revisión.

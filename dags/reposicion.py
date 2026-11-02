@@ -35,6 +35,10 @@ def reposicion():
         return operacion.hay_trabajo(operacion.rutas_de_entorno())
 
     @task
+    def entrenar_modelos():
+        operacion.entrenar_pendientes(operacion.rutas_de_entorno())
+
+    @task
     def detectar_versiones():
         return [v.a_dict() for v in operacion.versiones_pendientes(operacion.rutas_de_entorno())]
 
@@ -63,7 +67,7 @@ def reposicion():
 
     versiones = detectar_versiones()
     publicadas = publicar_pronostico_y_pedido.expand(version=validar_y_preparar.expand(version=versiones))
-    generar_bandeja() >> hay_trabajo() >> versiones
+    generar_bandeja() >> hay_trabajo() >> entrenar_modelos() >> versiones
     publicadas >> actualizar_seguimiento() >> versionar_con_dvc() >> marcar_revisado()
 
 

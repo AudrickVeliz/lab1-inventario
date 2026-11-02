@@ -22,11 +22,12 @@ from inventario.bandeja import (
 )
 from inventario.negocio import cargar_negocio
 from inventario.pronostico import SEMANAS_DE_MARGEN
+from inventario.entrenamiento import decision_de, entrenar_en_fecha, fechas_de_entrenamiento
 from inventario.publicacion import Rutas, Version, listar_publicaciones
 
 _FUENTE_PRINCIPAL = "train"
 _SIN_LIMITE = date.max
-_OBJETIVOS_DVC = ("historico", "bandeja", "procesados", "publicados", "seguimiento", "reportes")
+_OBJETIVOS_DVC = ("historico", "bandeja", "procesados", "modelos", "publicados", "seguimiento", "reportes")
 
 
 def rutas_de_entorno() -> Rutas:
@@ -96,6 +97,20 @@ def versiones_pendientes(rutas: Rutas) -> list[Version]:
             if inicio_ventana < archivo.fecha_dato < corte < archivo.fecha_entrega:
                 pendientes.add(Version(corte, archivo.fecha_entrega))
     return sorted(pendientes - set(listar_publicaciones(rutas)))
+
+
+def entrenar_pendientes(rutas: Rutas) -> list[date]:
+    """Entrena en orden: cada decisión compara contra el modelo vigente de la anterior.
+
+    Una fecha ya decidida no se repite, así que una corrección posterior no cambia
+    el modelo con el que se publicó un corte.
+    """
+    negocio = cargar_negocio(rutas.config_negocio)
+    fechas = fechas_de_entrenamiento(cortes_debidos(rutas), negocio.modelo.reentrenar_cada_cortes)
+    pendientes = [fecha for fecha in fechas if decision_de(rutas, fecha) is None]
+    for fecha in pendientes:
+        entrenar_en_fecha(rutas, fecha)
+    return pendientes
 
 
 def ultima_entrega(rutas: Rutas) -> date | None:
