@@ -40,3 +40,6 @@ airflow.cfg
 Thumbs.db
 .vscode/
 .idea/
+
+# Remoto local de DVC: contiene datos, nunca va en Git.
+/dvc-remote/
