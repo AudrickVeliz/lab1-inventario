@@ -1,0 +1,38 @@
+# Reglas de disponibilidad de cada fuente. Kaggle no trae fechas de llegada:
+# estos valores son supuestos del producto (ver DECISIONES.md, D-003).
+
+# Lo que ya había llegado en esta fecha forma la carga histórica;
+# lo que llega después se entrega por la bandeja.
+corte_historico: 2017-03-31
+
+fuentes:
+  train:
+    columnas: [id, date, store_nbr, family, sales, onpromotion]
+    columna_fecha: date
+    retraso_dias: 1
+    calendario: natural
+
+  transactions:
+    columnas: [date, store_nbr, transactions]
+    columna_fecha: date
+    retraso_dias: 2
+    calendario: natural
+
+  # El viernes se entrega el lunes: los fines de semana no hay entregas.
+  oil:
+    columnas: [date, dcoilwtico]
+    columna_fecha: date
+    retraso_dias: 1
+    calendario: habil
+
+  # Un retraso negativo es anticipación: el evento se conoce 30 días antes.
+  holidays_events:
+    columnas: [date, type, locale, locale_name, description, transferred]
+    columna_fecha: date
+    retraso_dias: -30
+    calendario: natural
+
+  # Catálogo sin fechas: solo entra en la carga histórica.
+  stores:
+    columnas: [store_nbr, city, state, type, cluster]
+    columna_fecha: null
