@@ -203,14 +203,14 @@ def test_el_pronostico_no_cambia_si_llegan_datos_posteriores(con_datos):
 def test_se_puede_reproducir_una_publicacion(con_datos):
     version = Version(date(2017, 4, 10), date(2017, 4, 10))
     procesar(con_datos, version)
-    assert publicacion.reproducir(con_datos, version) == {"pronostico.csv": True, "pedido.csv": True}
+    assert publicacion.reproducir(con_datos, version) == {"modelo": True, "pronostico.csv": True, "pedido.csv": True}
 
 
 def test_reproducir_detecta_una_publicacion_alterada(con_datos):
     version = Version(PRIMER_CORTE, PRIMER_CORTE)
     procesar(con_datos, version)
     (con_datos.publicados / version.relativa / "pedido.csv").write_bytes(b"alterado\n")
-    assert publicacion.reproducir(con_datos, version) == {"pronostico.csv": True, "pedido.csv": False}
+    assert publicacion.reproducir(con_datos, version) == {"modelo": True, "pronostico.csv": True, "pedido.csv": False}
 
 
 def test_comando_de_reproduccion(con_datos, capsys):

@@ -221,13 +221,19 @@ def listar_publicaciones(rutas: Rutas) -> list[Version]:
 
 
 def reproducir(rutas: Rutas, version: Version) -> dict[str, bool]:
-    """Recalcula una publicación desde los datos y el modelo, y compara el resultado byte a byte."""
+    """Recalcula una publicación desde los datos y el modelo, y compara el resultado byte a byte.
+
+    También compara el modelo usado: si no se puede cargar, el respaldo calcularía con
+    el baseline, y la diferencia no se debería a los datos.
+    """
     fuentes = cargar_configuracion(rutas.config_fuentes)
     negocio = cargar_negocio(rutas.config_negocio)
     archivos, _, _ = _preparar(rutas, version, fuentes, negocio)
-    pronostico, pedido, _ = _calcular(rutas, archivos, version, negocio)
+    pronostico, pedido, info = _calcular(rutas, archivos, version, negocio)
     carpeta = rutas.publicados / version.relativa
+    metadatos = json.loads((carpeta / "metadatos.json").read_text(encoding="utf-8"))
     return {
+        "modelo": (info["modelo"], info["modelo_entrenado"]) == (metadatos["modelo"], metadatos["modelo_entrenado"]),
         "pronostico.csv": (carpeta / "pronostico.csv").read_bytes() == pronostico,
         "pedido.csv": (carpeta / "pedido.csv").read_bytes() == pedido,
     }
@@ -247,6 +253,8 @@ def main(argumentos: list[str] | None = None) -> int:
     resultado = reproducir(rutas, version)
     for archivo, igual in resultado.items():
         print(f"{archivo}: {'idéntico' if igual else 'DISTINTO'}")
+    if not resultado["modelo"]:
+        print("El modelo publicado no se pudo usar: instala las dependencias de pyproject.toml.")
     return 0 if all(resultado.values()) else 1
 
 
