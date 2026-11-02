@@ -49,4 +49,18 @@ data/bandeja/train/2017-08-15__2017-08-16.csv   dato original
 data/bandeja/train/2017-08-15__2017-08-20.csv   corrección: rige desde el 20
 ```
 
-Cada archivo reemplaza a las versiones anteriores de esa fecha, así que debe traer todas sus filas.
+La corrección puede traer el archivo completo o solo las filas corregidas: cada fila reemplaza a la anterior con la misma clave y las demás se conservan. Una corrección no puede eliminar una fila.
+
+## Validar e ingerir
+
+Este comando valida lo que había llegado en una fecha de corte y escribe un reporte en `data/reportes/ingesta/<fecha>.json`:
+
+```
+python -m inventario.ingesta --fecha-corte 2017-04-03
+```
+
+- **Datos inválidos:** el archivo completo queda en cuarentena. Se registra en el reporte con su motivo, no se usa y el proceso continúa.
+- **Avisos:** el dato se conserva y queda registrado en el reporte.
+- **Carga histórica faltante o inválida:** el comando termina con error, porque no hay base con la cual operar.
+
+La lista completa de reglas está en `DECISIONES.md` (D-007).
