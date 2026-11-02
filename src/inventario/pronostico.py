@@ -11,7 +11,7 @@ from inventario.negocio import ConfigNegocio
 
 _SERIE = ["store_nbr", "family"]
 # Semanas adicionales para seguir teniendo observaciones si faltan días.
-_SEMANAS_DE_MARGEN = 2
+SEMANAS_DE_MARGEN = 2
 
 
 def nombre_cuantil(cuantil: float) -> str:
@@ -27,7 +27,7 @@ def ventana_reciente(conocidas: pd.DataFrame, semanas: int, dias_por_semana: int
     """Parte de la última fecha conocida: si la fuente se atrasa, usa lo más reciente que tenga."""
     if conocidas.empty:
         return conocidas
-    dias = dias_por_semana * (semanas + _SEMANAS_DE_MARGEN)
+    dias = dias_por_semana * (semanas + SEMANAS_DE_MARGEN)
     inicio = conocidas["date"].max() - pd.Timedelta(days=dias)
     return conocidas[conocidas["date"] > inicio]
 
