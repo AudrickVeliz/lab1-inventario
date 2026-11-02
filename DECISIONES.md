@@ -290,3 +290,51 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 **Alternativa:** un comando manual documentado en `README.md`, que respetaría la separación con más claridad, pero rompería el arranque sin intervención.
 
 **Riesgo aceptado:** si un CSV trae otro contenido para algo ya entregado, la generación se detiene y no entrega ninguna fila nueva de ese CSV, hasta que se corrija el origen o se entregue la corrección como archivo suelto. El motivo queda en `data/reportes/generacion.json`.
+
+## D-020: modelo de gradient boosting con incertidumbre por errores reales
+
+**Fecha:** 2026-11-01
+
+**Decisión:** `HistGradientBoostingRegressor` de scikit-learn predice el logaritmo de la venta diaria. Cada fila de entrenamiento simula un corte pasado: sus variables solo usan lo conocido en ese corte. Las variables son tienda, familia, tipo y grupo de tienda, calendario, horizonte, promedios de ventas conocidas, proporción de ceros, promociones pasadas, feriados y último petróleo conocido. Los cuantiles y el pedido se obtienen sumando a la predicción los cuantiles de los errores fuera de muestra de cada serie, en las últimas 12 semanas.
+
+**Evidencia:** 8 cortes de enero a marzo de 2017, sin tocar el periodo de seguimiento.
+
+| Variante | Costo | Frente al baseline | WAPE | Cobertura 0.10 a 0.90 |
+|---|---|---|---|---|
+| Baseline | 8,082,840 | | 0.141 | 75.3% |
+| Error cuadrático, 200 árboles | 8,133,174 | +0.6% | 0.151 | 79.9% |
+| **Error cuadrático, 400 árboles (elegida)** | 7,626,945 | -5.6% | 0.142 | 80.0% |
+| Error absoluto, 200 árboles | 8,688,673 | +7.5% | 0.152 | 79.7% |
+
+**Advertencia:** la variante se eligió con estos mismos cortes, así que el -5.6% es algo optimista. La medición independiente es el reporte de seguimiento.
+
+**Justificación:** scikit-learn ya está en las restricciones de Airflow, así que no agrega riesgo de instalación. Usar errores reales corrige la cobertura sin un modelo por cuantil, y permite que un cambio de costos modifique el pedido sin reentrenar.
+
+**Alternativas:**
+- **Modelos de cuantil:** requieren un modelo por cuantil y reentrenar si cambian los costos.
+- **LightGBM:** es una dependencia adicional y fuera de las restricciones de Airflow, sin una ventaja medida.
+- **Deep learning:** el enunciado pide justificarlo en costo y beneficio, y aquí no se justifica en una laptop.
+
+**Limitación:** los errores de una serie se fijan al entrenar y se actualizan solo cada 4 cortes.
+
+## D-021: criterio para reemplazar al modelo vigente
+
+**Fecha:** 2026-11-01
+
+**Decisión:** cada 4 cortes se entrena un candidato, que no ve los 20 cortes más recientes: 12 calculan sus errores y 8 lo comparan con el vigente y con el baseline. Lo reemplaza si baja el costo de negocio al menos 2% y su cobertura no se aleja más del valor nominal. Si reemplaza, se reentrena con esos cortes incluidos. El primer vigente es el baseline. Cada decisión queda en `data/modelos/<fecha>/decision.json`.
+
+**Justificación:** el costo de negocio es lo que importa al producto, y el margen de 2% evita cambiar de modelo por ruido. La cobertura evita ganar en costo con un intervalo mal calibrado.
+
+**Sesgo aceptado:** un vigente de ML ya vio parte de los cortes de evaluación, así que parte con ventaja. Se acepta porque hace más difícil reemplazarlo sin una mejora real.
+
+**Alternativas:** reemplazar siempre al último, que no permite justificar el cambio; o reentrenar en cada corte, que es demasiado costoso en una laptop.
+
+## D-022: respaldo con el baseline
+
+**Fecha:** 2026-11-01
+
+**Decisión:** si no hay datos suficientes o el entrenamiento falla, sigue el modelo vigente y el motivo queda registrado. Si un modelo no se puede cargar o usar al publicar, se publica con el baseline y los metadatos lo indican. Un corte siempre usa el modelo vigente en su fecha, también en sus versiones corregidas.
+
+**Justificación:** una falla del modelo no debe dejar a una tienda sin pedido. Es una situación de operación, no un dato inválido.
+
+**Alternativa:** detener la publicación, que deja sin recomendación a todas las tiendas.
