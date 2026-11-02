@@ -1,0 +1,8 @@
+# Docker Compose empaqueta el contexto de construcción con este archivo, también sobre Podman.
+# Se excluye todo salvo lo que necesita la imagen, para no enviar los datos en cada construcción.
+*
+!pyproject.toml
+!src
+# Generados por una instalación local; dentro de la imagen impiden construir el paquete.
+**/*.egg-info
+**/__pycache__
