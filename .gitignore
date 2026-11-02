@@ -1,0 +1,38 @@
+# Datos y modelos: se versionan con DVC, nunca con Git.
+# Solo se permiten los punteros .dvc y los .gitignore que genera DVC.
+data/**
+models/**
+!data/**/
+!models/**/
+!data/**/*.dvc
+!models/**/*.dvc
+!data/**/.gitignore
+!models/**/.gitignore
+!data/**/.gitkeep
+!models/**/.gitkeep
+
+# Credenciales y configuración local
+.env
+kaggle.json
+.dvc/config.local
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+
+# Airflow
+logs/
+airflow.cfg
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,5 @@
+# LF en todos los textos: el código corre dentro de contenedores Linux,
+# y un script con CRLF generado en Windows falla al ejecutarse ahí.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
