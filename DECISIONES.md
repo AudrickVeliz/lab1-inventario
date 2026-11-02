@@ -208,3 +208,43 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 - **Simular el inventario:** agrega supuestos que no se pueden comprobar sobre lo que realmente sobró en cada tienda.
 
 **Costo aceptado:** en productos no perecederos, el pedido puede ser mayor de lo necesario, porque ignora lo que sobró de la semana anterior.
+
+## D-015: compose de Airflow adaptado a una laptop
+
+**Fecha:** 2026-11-01
+
+**Contexto:** se parte del `docker-compose.yaml` oficial de Airflow 3.3.2. Debe correr en una laptop con Podman y, sin cambios, en Docker, sin archivos ni pasos adicionales.
+
+**Decisión:** usar `compose.yaml` y `Containerfile`, con estos cambios frente al original.
+
+| Cambio | Justificación |
+|---|---|
+| `LocalExecutor`; sin `redis`, `airflow-worker` ni `flower` | Una sola máquina no necesita Celery |
+| Sin `airflow-triggerer` | Es opcional y ningún DAG usa tareas diferidas |
+| Límites: `PARALLELISM` 2, una ejecución activa por DAG y un worker de API | Cada corte carga millones de filas en memoria |
+| Logs en un volumen, no en `./logs` | OneDrive intentaría sincronizar miles de archivos |
+| Credenciales con `${AIRFLOW_USER:-airflow}` y `${AIRFLOW_PASSWORD:-airflow}` | Funciona sin configurar nada y permite cambiarlas con variables de entorno |
+| Sin `env_file: .env` | En el original es obligatorio, y un clon nuevo no tiene `.env`. Compose ya lee `.env` para las variables |
+| Sin montar `./config` en Airflow | Ahí están los YAML del producto, y Airflow escribiría su `airflow.cfg` junto a ellos |
+| DAGs activos al crearse y sin ejemplos | La evaluación no tiene intervención manual |
+| Imágenes con `docker.io/` | Con Podman, un nombre sin registro puede pedir confirmación o fallar; en Docker es equivalente |
+| Imagen propia, no `_PIP_ADDITIONAL_REQUIREMENTS` | La documentación oficial reserva esa opción para pruebas rápidas |
+| El proyecto se monta completo | El código y los datos corresponden al commit, sin reconstruir la imagen al cambiar el código |
+
+**Compatibilidad:** `Containerfile` se indica en `build.dockerfile`, porque Docker no lo detecta por sí solo. El contexto de construcción se filtra con `.dockerignore`, porque el cliente de Compose lo aplica también al trabajar sobre Podman. El workflow `Compose en Docker` levanta este mismo archivo con Docker en Linux.
+
+**Alternativas:** `CeleryExecutor` como en el original, que agrega servicios sin ningún beneficio en una sola máquina; o instalar Airflow sin contenedores, que el enunciado no permite.
+
+**Limitación:** cambiar `AIRFLOW_USER` o `AIRFLOW_PASSWORD` solo surte efecto al crear la base de datos; después hay que recrearla con `compose down -v`.
+
+## D-016: versiones exactas iguales a las de Airflow
+
+**Fecha:** 2026-11-01
+
+**Contexto:** las restricciones oficiales de Airflow 3.3.2 fijan `pandas==3.0.5`, y el proyecto pedía `pandas<3`.
+
+**Decisión:** fijar en `pyproject.toml` las versiones exactas de esas restricciones: `pandas==3.0.5`, `numpy==2.5.3` y `pyyaml==6.0.3`.
+
+**Justificación:** el entorno local, el CI y el contenedor usan las mismas librerías, lo que permite reproducir un pronóstico. Se comprobó el cambio: con pandas 3 pasan todas las pruebas y los resultados del baseline son idénticos.
+
+**Alternativa:** mantener pandas 2 sin usar las restricciones. Es más simple a corto plazo, pero la instalación se aparta de las versiones que Airflow publica como compatibles.

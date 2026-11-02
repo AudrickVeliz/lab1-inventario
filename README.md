@@ -16,6 +16,22 @@ Las instrucciones completas para levantar y ejecutar el producto se agregarán a
 
 El comando crea `data/historico/`, con lo que ya había llegado el 2017-03-31, y `data/bandeja/`, con lo que llega después. Volver a ejecutarlo no cambia nada.
 
+## Levantar Airflow
+
+Necesitas Docker o Podman, con al menos 4 GB de memoria disponibles. La primera vez se construye la imagen, lo que tarda varios minutos.
+
+```
+docker compose up -d
+```
+
+Con Podman, el comando es `podman compose up -d`. El archivo es el mismo y no necesita cambios.
+
+La interfaz queda en <http://localhost:8080>, con el usuario `airflow` y la contraseña `airflow`.
+
+Para usar otras credenciales, define `AIRFLOW_USER` y `AIRFLOW_PASSWORD` en el entorno o en un archivo `.env` antes de levantar Airflow por primera vez. Solo se aplican al crear la base de datos; para cambiarlas después, usa `docker compose down -v`, que borra el historial de ejecuciones.
+
+El DAG `comprobar_entorno` se dispara a mano y comprueba la instalación de punta a punta. Requiere haber preparado los datos.
+
 ## Cómo inyectar datos
 
 La bandeja acepta datos nuevos de dos formas. Las fechas de llegada de cada fuente están en `config/fuentes.yaml`.

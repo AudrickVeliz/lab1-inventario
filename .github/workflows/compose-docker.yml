@@ -1,0 +1,67 @@
+# Comprueba en Docker el mismo compose que se desarrolla sobre Podman.
+# Solo corre si cambia lo que afecta al despliegue, porque tarda varios minutos.
+name: Compose en Docker
+
+on:
+  pull_request:
+    paths:
+      - compose.yaml
+      - Containerfile
+      - .dockerignore
+      - pyproject.toml
+      - dags/**
+      - .github/workflows/compose-docker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  levantar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sin .env y sin variables, como lo hará el equipo docente.
+      - name: Levantar Airflow
+        run: docker compose up -d --build
+
+      - name: Esperar a que el scheduler esté sano
+        run: |
+          for intento in $(seq 1 40); do
+            if curl -s -m 5 http://localhost:8080/api/v2/monitor/health | grep -q '"scheduler":{"status":"healthy"'; then
+              exit 0
+            fi
+            sleep 6
+          done
+          exit 1
+
+      - name: Comprobar las credenciales por defecto
+        run: |
+          token=$(curl -sf -X POST http://localhost:8080/auth/token \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"airflow","password":"airflow"}' | jq -r .access_token)
+          echo "::add-mask::$token"
+          echo "TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Comprobar que el DAG carga activo y sin errores
+        run: |
+          for intento in $(seq 1 20); do
+            dag=$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v2/dags/comprobar_entorno)
+            if [ "$(echo "$dag" | jq -r .dag_id)" = "comprobar_entorno" ]; then break; fi
+            sleep 5
+          done
+          test "$(echo "$dag" | jq -r .is_paused)" = "false"
+          test "$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v2/importErrors | jq -r .total_entries)" = "0"
+
+      # En Linux, el usuario de Airflow no es el dueño del repositorio clonado.
+      - name: Comprobar que Airflow puede escribir en los datos
+        run: docker compose exec -T airflow-scheduler sh -c 'touch /opt/inventario/data/.prueba && rm /opt/inventario/data/.prueba'
+
+      - name: Comprobar que el código del producto se importa
+        run: docker compose exec -T airflow-scheduler python -c "import inventario.ingesta, inventario.bandeja; print(inventario.__file__)"
+
+      - name: Mostrar logs si falló
+        if: failure()
+        run: docker compose logs --tail=80
