@@ -1,5 +1,6 @@
-# Comprueba en Docker el mismo compose que se desarrolla sobre Podman.
-# Solo corre si cambia lo que afecta al despliegue, porque tarda varios minutos.
+# Recorre en Docker el camino del equipo docente: clonar, colocar los CSV y levantar.
+# Usa datos sintéticos, porque los de Kaggle no están en el repositorio.
+# Solo corre si cambia lo que afecta al flujo, porque tarda varios minutos.
 name: Compose en Docker
 
 on:
@@ -9,7 +10,10 @@ on:
       - Containerfile
       - .dockerignore
       - pyproject.toml
+      - config/**
       - dags/**
+      - src/**
+      - tests/datos_sinteticos.py
       - .github/workflows/compose-docker.yml
   workflow_dispatch:
 
@@ -19,11 +23,14 @@ permissions:
 jobs:
   levantar:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      # Sin .env y sin variables, como lo hará el equipo docente.
+      - name: Colocar los CSV
+        run: python3 tests/datos_sinteticos.py data/kaggle
+
+      # Sin .env y sin variables, y sin ningún comando adicional.
       - name: Levantar Airflow
         run: docker compose up -d --build
 
@@ -37,31 +44,88 @@ jobs:
           done
           exit 1
 
-      - name: Comprobar las credenciales por defecto
+      - name: Comprobar las credenciales por defecto y los DAGs
         run: |
           token=$(curl -sf -X POST http://localhost:8080/auth/token \
             -H 'Content-Type: application/json' \
             -d '{"username":"airflow","password":"airflow"}' | jq -r .access_token)
           echo "::add-mask::$token"
           echo "TOKEN=$token" >> "$GITHUB_ENV"
-
-      - name: Comprobar que el DAG carga activo y sin errores
-        run: |
           for intento in $(seq 1 20); do
-            dag=$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v2/dags/comprobar_entorno)
-            if [ "$(echo "$dag" | jq -r .dag_id)" = "comprobar_entorno" ]; then break; fi
+            dag=$(curl -s -H "Authorization: Bearer $token" http://localhost:8080/api/v2/dags/reposicion)
+            if [ "$(echo "$dag" | jq -r .dag_id)" = "reposicion" ]; then break; fi
             sleep 5
           done
           test "$(echo "$dag" | jq -r .is_paused)" = "false"
-          test "$(curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v2/importErrors | jq -r .total_entries)" = "0"
+          test "$(curl -s -H "Authorization: Bearer $token" http://localhost:8080/api/v2/importErrors | jq -r .total_entries)" = "0"
 
-      # En Linux, el usuario de Airflow no es el dueño del repositorio clonado.
-      - name: Comprobar que Airflow puede escribir en los datos
-        run: docker compose exec -T airflow-scheduler sh -c 'touch /opt/inventario/data/.prueba && rm /opt/inventario/data/.prueba'
+      # Nadie dispara el DAG: debe arrancar solo con su calendario.
+      - name: Esperar a que el flujo termine solo
+        run: |
+          for intento in $(seq 1 90); do
+            if [ -f data/.estado/ultima_revision.json ]; then exit 0; fi
+            sleep 10
+          done
+          exit 1
 
-      - name: Comprobar que el código del producto se importa
-        run: docker compose exec -T airflow-scheduler python -c "import inventario.ingesta, inventario.bandeja; print(inventario.__file__)"
+      - name: Comprobar el resultado
+        run: |
+          test "$(ls data/publicados | wc -l)" = "7"
+          test -f data/publicados/2017-04-03/2017-04-03/pedido.csv
+          test -f data/publicados/2017-04-03/2017-04-03/pronostico.csv
+          test -f data/publicados/2017-04-03/2017-04-03/metadatos.json
+          grep -q "Seguimiento del desempeño" data/seguimiento/reporte.md
+          test -f data/publicados.dvc
+          test -n "$(ls -A dvc-remote)"
+
+      - name: Reproducir una publicación
+        run: docker compose exec -T airflow-scheduler python -m inventario.publicacion --corte 2017-04-03 --raiz /opt/inventario
+
+      # La bandeja la escribe el sistema externo. Aquí se entrega desde el contenedor,
+      # porque en Linux la carpeta pertenece al usuario de Airflow.
+      - name: Entregar una corrección válida y una inválida
+        run: |
+          md5sum data/publicados/2017-04-10/2017-04-10/pedido.csv > /tmp/original.md5
+          encabezado='id,date,store_nbr,family,sales,onpromotion'
+          docker compose exec -T airflow-scheduler sh -c "printf '$encabezado\n999,2017-04-05,1,BEVERAGES,500.0,0\n' > /opt/inventario/data/bandeja/train/2017-04-05__2017-05-02.csv"
+          docker compose exec -T airflow-scheduler sh -c "printf '$encabezado\n999,2017-04-06,1,BEVERAGES,-5.0,0\n' > /opt/inventario/data/bandeja/train/2017-04-06__2017-05-03.csv"
+
+      - name: Esperar a que el flujo procese las correcciones solo
+        run: |
+          for intento in $(seq 1 60); do
+            if [ -f data/publicados/2017-04-10/2017-05-03/metadatos.json ]; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Comprobar las correcciones
+        run: |
+          md5sum -c /tmp/original.md5
+          test -f data/publicados/2017-04-10/2017-05-02/pedido.csv
+          jq -e '.archivos_en_cuarentena[0].archivo == "2017-04-06__2017-05-03.csv"' data/publicados/2017-04-10/2017-05-03/metadatos.json
+          test "$(tail -n +2 data/seguimiento/desempeno.csv | wc -l)" = "7"
+
+      - name: Ejecutar un backfill
+        run: |
+          token=$(curl -sf -X POST http://localhost:8080/auth/token \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"airflow","password":"airflow"}' | jq -r .access_token)
+          echo "::add-mask::$token"
+          echo "TOKEN=$token" >> "$GITHUB_ENV"
+          corrida=$(curl -sf -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+            http://localhost:8080/api/v2/dags/backfill/dagRuns \
+            -d '{"logical_date":null,"conf":{"desde":"2017-02-06","hasta":"2017-02-06"}}' | jq -r .dag_run_id)
+          for intento in $(seq 1 60); do
+            estado=$(curl -s -G -H "Authorization: Bearer $token" "http://localhost:8080/api/v2/dags/backfill/dagRuns/$corrida" | jq -r .state)
+            case "$estado" in success) break;; failed) exit 1;; esac
+            sleep 5
+          done
+          test "$estado" = "success"
+          test -f data/publicados/2017-02-06/2017-02-06/pedido.csv
 
       - name: Mostrar logs si falló
         if: failure()
-        run: docker compose logs --tail=80
+        run: |
+          docker compose logs --tail=80
+          curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/v2/dags/reposicion/dagRuns" | jq . || true
+          ls -la data data/reportes || true
