@@ -248,3 +248,45 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 **Justificación:** el entorno local, el CI y el contenedor usan las mismas librerías, lo que permite reproducir un pronóstico. Se comprobó el cambio: con pandas 3 pasan todas las pruebas y los resultados del baseline son idénticos.
 
 **Alternativa:** mantener pandas 2 sin usar las restricciones. Es más simple a corto plazo, pero la instalación se aparta de las versiones que Airflow publica como compatibles.
+
+## D-017: publicaciones inmutables por corte y conocimiento
+
+**Fecha:** 2026-11-01
+
+**Contexto:** una corrección debe generar una versión nueva sin reescribir lo publicado, y un pronóstico debe poder reproducirse.
+
+**Decisión:** cada publicación vive en `data/publicados/<corte>/<conocimiento>/` y nunca se reescribe. La original tiene ambas fechas iguales. Una entrega que llega después de un corte, sobre un dato de la ventana que ese corte usa, genera una versión nueva de **todos los cortes afectados**, con su fecha de entrega como conocimiento. Los datos atrasados se tratan igual que las correcciones. Los metadatos registran el commit, los md5 de los datos preparados y de la configuración, la última fecha de cada fuente y los archivos en cuarentena.
+
+**Alternativa:** versionar solo el corte más reciente y dejar los anteriores a un backfill manual. Genera menos versiones, pero el enunciado pide procesar los datos corregidos sin intervención manual.
+
+**Costo aceptado:** una corrección puede generar hasta 14 versiones de pedidos que ya no se pueden cambiar. Un cambio de costos en la configuración solo afecta a los cortes futuros, porque lo publicado no se reescribe; para ver su efecto en un corte pasado hay que usar otra fecha de conocimiento.
+
+**Seguimiento:** compara la publicación original, que fue la decisión tomada, con las ventas corregidas.
+
+## D-018: revisor periódico en un solo DAG
+
+**Fecha:** 2026-11-01
+
+**Contexto:** las fechas de los datos son de 2017, y el periodo que se usará en la evaluación es desconocido.
+
+**Decisión:** el DAG `reposicion` corre cada 5 minutos, calcula qué falta a partir de la bandeja y procesa cada versión con lo conocido a su fecha. Si no llegó nada, termina sin recalcular. Un corte se procesa cuando hay ventas hasta su víspera. Solo `train` crea cortes, porque los feriados se anuncian con meses de anticipación y crearían cortes sin ventas.
+
+**Alternativas:**
+- **Calendario con `catchup`:** crea una ejecución por lunes hasta la fecha real, unas 500. Con una fecha final en la configuración se evita, pero un periodo posterior no se procesaría sin cambiarla.
+- **Cuatro DAGs, uno por etapa:** tendrían que coordinarse entre sí sin ganar nada. Las etapas son tareas del mismo DAG.
+
+**Costo aceptado:** en la interfaz, los cortes aparecen como tareas de una ejecución, no como una ejecución por lunes. Airflow los muestra identificados por corte y conocimiento.
+
+**Backfill:** el DAG `backfill` se dispara a mano con un rango de fechas.
+
+## D-019: generación automática de la bandeja
+
+**Fecha:** 2026-11-01
+
+**Contexto:** el equipo docente coloca los CSV y levanta Airflow. Ningún paso adicional debe ser manual.
+
+**Decisión:** la primera tarea del revisor genera la bandeja si encuentra CSV en `data/kaggle/`. Es idempotente y no sobrescribe lo entregado. Representa al sistema externo y es la única tarea que escribe en la bandeja; las demás solo la leen.
+
+**Alternativa:** un comando manual documentado en `README.md`, que respetaría la separación con más claridad, pero rompería el arranque sin intervención.
+
+**Riesgo aceptado:** si un CSV trae otro contenido para algo ya entregado, la generación se detiene y no entrega ninguna fila nueva de ese CSV, hasta que se corrija el origen o se entregue la corrección como archivo suelto. El motivo queda en `data/reportes/generacion.json`.
