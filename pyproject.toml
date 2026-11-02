@@ -10,9 +10,12 @@ requires-python = ">=3.12,<3.13"
 # Versiones exactas, iguales a las restricciones de Airflow 3.3.2: local, CI y contenedor
 # usan lo mismo, y un pronóstico se puede reproducir con las mismas librerías.
 dependencies = [
+    # dill y pyarrow: el modelo guardado dentro de Airflow los necesita para cargarse.
+    "dill==0.4.1",
     "joblib==1.6.0",
     "numpy==2.5.3",
     "pandas==3.0.5",
+    "pyarrow==25.0.1",
     "pyyaml==6.0.3",
     "scikit-learn==1.9.1",
     "scipy==1.18.1",

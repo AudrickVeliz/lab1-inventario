@@ -243,7 +243,7 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 
 **Contexto:** las restricciones oficiales de Airflow 3.3.2 fijan `pandas==3.0.5`, y el proyecto pedía `pandas<3`.
 
-**Decisión:** fijar en `pyproject.toml` las versiones exactas de esas restricciones: `pandas==3.0.5`, `numpy==2.5.3` y `pyyaml==6.0.3`.
+**Decisión:** fijar en `pyproject.toml` las versiones exactas de esas restricciones, incluidas `pandas==3.0.5`, `numpy==2.5.3` y `scikit-learn==1.9.1`. También se fijan `dill` y `pyarrow`, porque un modelo guardado dentro de Airflow los necesita para cargarse: sin ellos, reproducir fuera del contenedor caía al baseline.
 
 **Justificación:** el entorno local, el CI y el contenedor usan las mismas librerías, lo que permite reproducir un pronóstico. Se comprobó el cambio: con pandas 3 pasan todas las pruebas y los resultados del baseline son idénticos.
 
