@@ -31,6 +31,7 @@ x-airflow-common:
     AIRFLOW__API__WORKERS: '1'
     # El código y los datos vienen del proyecto montado, no de la imagen.
     INVENTARIO_RAIZ: /opt/inventario
+    INVENTARIO_DVC: /home/airflow/dvc/bin/dvc
     PYTHONPATH: /opt/inventario/src
   volumes:
     - .:/opt/inventario
@@ -116,12 +117,13 @@ services:
         if (( mem_available < 4000 )) ; then
           echo "ADVERTENCIA: se recomiendan al menos 4 GB de memoria; hay $${mem_available} MB."
         fi
-        mkdir -p /opt/airflow/logs /opt/inventario/data
+        cd /opt/inventario
+        mkdir -p /opt/airflow/logs data dvc-remote
         /entrypoint airflow version
-        # Permite escribir datos y logs al usuario de Airflow. En Windows y macOS los
-        # montajes pueden ignorar el cambio de dueño, y eso no es un error.
+        # Permite escribir datos, logs y versiones de DVC al usuario de Airflow. En Windows
+        # y macOS los montajes pueden ignorar el cambio de dueño, y eso no es un error.
         chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs
-        chown -R "${AIRFLOW_UID:-50000}:0" /opt/inventario/data || true
+        chown -R "${AIRFLOW_UID:-50000}:0" data .dvc dvc-remote || true
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'

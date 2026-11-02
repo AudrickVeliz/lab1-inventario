@@ -1,6 +1,9 @@
 # Parámetros de negocio. Cambiarlos modifica la recomendación sin tocar el código.
 # Kaggle no trae precios ni márgenes: los costos son supuestos del producto (DECISIONES.md, D-013).
 
+# Día de la semana de cada corte: 0 es lunes.
+dia_semana_corte: 0
+
 # Días que cubre cada pronóstico y cada pedido: de martes a lunes si el corte es el lunes.
 horizonte_dias: 7
 

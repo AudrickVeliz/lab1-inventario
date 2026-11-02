@@ -22,6 +22,7 @@ class GrupoCosto:
 
 @dataclass(frozen=True)
 class ConfigNegocio:
+    dia_semana_corte: int
     horizonte_dias: int
     semanas_baseline: int
     dias_minimos_por_bloque: int
@@ -59,8 +60,11 @@ def cargar_negocio(ruta: Path) -> ConfigNegocio:
         raise ValueError("los cuantiles deben estar entre 0 y 1")
     if datos["horizonte_dias"] < 1 or datos["baseline"]["semanas"] < 1:
         raise ValueError("el horizonte y las semanas del baseline deben ser positivos")
+    if datos["dia_semana_corte"] not in range(7):
+        raise ValueError("el día de la semana del corte debe estar entre 0 y 6")
 
     return ConfigNegocio(
+        dia_semana_corte=datos["dia_semana_corte"],
         horizonte_dias=datos["horizonte_dias"],
         semanas_baseline=datos["baseline"]["semanas"],
         dias_minimos_por_bloque=datos["baseline"]["dias_minimos_por_bloque"],
