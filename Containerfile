@@ -10,3 +10,7 @@ COPY --chown=airflow:root src /tmp/inventario/src
 RUN pip install --no-cache-dir \
     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt" \
     /tmp/inventario
+
+# DVC va en un entorno aparte, para que sus dependencias no choquen con las de Airflow.
+RUN python -m venv /home/airflow/dvc \
+    && /home/airflow/dvc/bin/pip install --no-cache-dir "dvc==3.67.1"
