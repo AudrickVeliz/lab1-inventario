@@ -149,3 +149,62 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 **Alternativa:** reemplazar toda la fecha. Es más simple, pero una corrección parcial borraría el resto del día.
 
 **Costo aceptado:** una corrección no puede eliminar una fila, solo cambiar sus valores.
+
+## D-011: corte semanal con cobertura de martes a lunes
+
+**Fecha:** 2026-11-01
+
+**Decisión:** el producto emite cada lunes por la mañana un pronóstico diario de 7 días y un pedido que cubre de martes a lunes. El lunes se conocen las ventas hasta el domingo, las transacciones hasta el sábado y el petróleo hasta el viernes.
+
+**Justificación:** la operación pide una sugerencia semanal. El pedido no se entrega el mismo día, y esta cobertura enlaza una semana con la siguiente sin huecos. Quedan 20 cortes de seguimiento, del 2017-04-03 al 2017-08-14; el último no se puede evaluar completo, porque las ventas terminan el 15 de agosto.
+
+**Alternativa:** un horizonte de 14 días daría más anticipación, pero el pedido solo necesita la semana que cubre.
+
+## D-012: baseline con la mediana de 12 semanas
+
+**Fecha:** 2026-11-01
+
+**Decisión:** el pronóstico diario usa los cuantiles 0.10, 0.50 y 0.90 de las últimas 12 observaciones del mismo día de la semana, por tienda y familia. Si las ventas se atrasan, parte de la última fecha conocida. Una serie sin observaciones se pronostica en 0 y se identifica con `observaciones` = 0.
+
+**Evidencia:** 25 cortes de octubre de 2016 a marzo de 2017, solo con la carga histórica.
+
+| Candidato | WAPE |
+|---|---|
+| Mismo día de la semana pasada | 0.214 |
+| Media de 4 semanas | 0.197 |
+| Mediana de 4 semanas | 0.184 |
+| Mediana de 12 semanas (elegida) | 0.181 |
+| Mediana de 8 semanas | 0.178 |
+
+**Justificación:** la mediana de 8 semanas gana por 0.003, una diferencia mínima. Se eligen 12 porque los cuantiles se estiman con más observaciones y, en esa medición, el cuantil 0.85 del total semanal cubrió mejor la demanda real (77% frente a 76%).
+
+**Limitación:** el baseline no considera feriados ni promociones. En los 20 cortes de seguimiento, el intervalo entre los cuantiles 0.10 y 0.90 cubre el 71% de las ventas, por debajo del 80% esperado. Es lo que el modelo de ML debe mejorar.
+
+## D-013: costos de quiebre y merma
+
+**Fecha:** 2026-11-01
+
+**Contexto:** Kaggle no trae precios ni márgenes, así que estos costos relativos por unidad son supuestos del producto. Viven en `config/negocio.yaml`.
+
+**Decisión:**
+
+| Grupo | Quiebre | Merma | Cuantil del pedido |
+|---|---|---|---|
+| Perecederos: `BREAD/BAKERY`, `DAIRY`, `DELI`, `EGGS`, `MEATS`, `POULTRY`, `PREPARED FOODS`, `PRODUCE`, `SEAFOOD` | 3 | 2 | 0.60 |
+| Resto, incluida cualquier familia nueva | 3 | 0.5 | 0.86 |
+
+**Justificación:** el cuantil se calcula como `quiebre / (quiebre + merma)`, que minimiza el costo esperado cuando se compara lo que falta con lo que sobra. Un producto no perecedero que sobra se puede vender después; uno perecedero se pierde.
+
+**Alternativa:** un solo costo para todas las familias, que ignoraría la merma de los perecederos que describe el enunciado.
+
+## D-014: pedido sin inventario inicial
+
+**Fecha:** 2026-11-01
+
+**Decisión:** el pedido es el cuantil crítico del total del periodo, redondeado al entero superior. Supone que el periodo empieza sin existencias, porque no hay datos de inventario. El total se estima con 12 bloques de 7 días; un bloque con menos de 6 días observados no se usa, de modo que el 25 de diciembre no invalida su semana.
+
+**Alternativas:**
+- **Sumar los cuantiles diarios:** exagera la incertidumbre, porque supone que todos los días son altos o bajos a la vez.
+- **Simular el inventario:** agrega supuestos que no se pueden comprobar sobre lo que realmente sobró en cada tienda.
+
+**Costo aceptado:** en productos no perecederos, el pedido puede ser mayor de lo necesario, porque ignora lo que sobró de la semana anterior.

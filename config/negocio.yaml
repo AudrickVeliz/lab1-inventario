@@ -1,0 +1,35 @@
+# Parámetros de negocio. Cambiarlos modifica la recomendación sin tocar el código.
+# Kaggle no trae precios ni márgenes: los costos son supuestos del producto (DECISIONES.md, D-013).
+
+# Días que cubre cada pronóstico y cada pedido: de martes a lunes si el corte es el lunes.
+horizonte_dias: 7
+
+baseline:
+  # Observaciones del mismo día de la semana que se usan para cada pronóstico.
+  semanas: 12
+  # Un bloque con menos días observados no se usa para estimar el total del periodo.
+  dias_minimos_por_bloque: 6
+
+# Cuantiles diarios que se publican.
+cuantiles: [0.10, 0.50, 0.90]
+
+# Costos relativos por unidad.
+costos:
+  grupo_predeterminado: resto
+  grupos:
+    perecederos:
+      quiebre: 3
+      merma: 2
+      familias:
+        - BREAD/BAKERY
+        - DAIRY
+        - DELI
+        - EGGS
+        - MEATS
+        - POULTRY
+        - PREPARED FOODS
+        - PRODUCE
+        - SEAFOOD
+    resto:
+      quiebre: 3
+      merma: 0.5
