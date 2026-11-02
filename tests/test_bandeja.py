@@ -9,7 +9,7 @@ import pytest
 from inventario.bandeja import (
     ConflictoBandeja,
     ErrorOrigen,
-    archivos_disponibles,
+    versiones_disponibles,
     cargar_configuracion,
     fecha_entrega,
     generar,
@@ -227,29 +227,29 @@ def _entregar(bandeja, fuente, *nombres_archivo):
 
 def test_no_ve_lo_que_llega_despues_del_corte(tmp_path):
     _entregar(tmp_path, "train", "2017-04-01__2017-04-02.csv", "2017-04-02__2017-04-03.csv")
-    disponibles = archivos_disponibles(tmp_path, "train", date(2017, 4, 2))
+    disponibles = versiones_disponibles(tmp_path, "train", date(2017, 4, 2))
     assert [a.fecha_dato for a in disponibles] == [date(2017, 4, 1)]
 
 
 def test_una_correccion_solo_rige_desde_su_entrega(tmp_path):
     _entregar(tmp_path, "train", "2017-04-01__2017-04-02.csv", "2017-04-01__2017-04-10.csv")
 
-    antes = archivos_disponibles(tmp_path, "train", date(2017, 4, 9))
-    despues = archivos_disponibles(tmp_path, "train", date(2017, 4, 10))
+    antes = versiones_disponibles(tmp_path, "train", date(2017, 4, 9))
+    despues = versiones_disponibles(tmp_path, "train", date(2017, 4, 10))
 
     assert [a.fecha_entrega for a in antes] == [date(2017, 4, 2)]
-    assert [a.fecha_entrega for a in despues] == [date(2017, 4, 10)]
+    assert [a.fecha_entrega for a in despues] == [date(2017, 4, 2), date(2017, 4, 10)]
 
 
 def test_un_feriado_anunciado_se_conoce_antes_de_su_fecha(tmp_path):
     _entregar(tmp_path, "holidays_events", "2017-05-14__2017-04-14.csv")
-    assert archivos_disponibles(tmp_path, "holidays_events", date(2017, 4, 13)) == []
-    disponibles = archivos_disponibles(tmp_path, "holidays_events", date(2017, 4, 14))
+    assert versiones_disponibles(tmp_path, "holidays_events", date(2017, 4, 13)) == []
+    disponibles = versiones_disponibles(tmp_path, "holidays_events", date(2017, 4, 14))
     assert [a.fecha_dato for a in disponibles] == [date(2017, 5, 14)]
 
 
 def test_una_fuente_que_no_llega_no_falla(tmp_path):
-    assert archivos_disponibles(tmp_path, "oil", date(2017, 4, 1)) == []
+    assert versiones_disponibles(tmp_path, "oil", date(2017, 4, 1)) == []
     assert nombres_invalidos(tmp_path, "oil") == []
 
 
@@ -259,14 +259,14 @@ def test_una_fuente_que_no_llega_no_falla(tmp_path):
 )
 def test_reporta_nombres_invalidos_sin_usarlos(tmp_path, nombre):
     _entregar(tmp_path, "train", nombre)
-    assert archivos_disponibles(tmp_path, "train", date(2030, 1, 1)) == []
+    assert versiones_disponibles(tmp_path, "train", date(2030, 1, 1)) == []
     assert [r.name for r in nombres_invalidos(tmp_path, "train")] == [nombre]
 
 
 def test_leer_no_modifica_la_bandeja(tmp_path):
     _entregar(tmp_path, "train", "2017-04-01__2017-04-02.csv", "2017-04-01__2017-04-10.csv")
     antes = {r: (r.read_bytes(), r.stat().st_mtime_ns) for r in tmp_path.rglob("*") if r.is_file()}
-    archivos_disponibles(tmp_path, "train", date(2017, 4, 5))
+    versiones_disponibles(tmp_path, "train", date(2017, 4, 5))
     nombres_invalidos(tmp_path, "train")
     assert antes == {r: (r.read_bytes(), r.stat().st_mtime_ns) for r in tmp_path.rglob("*") if r.is_file()}
 

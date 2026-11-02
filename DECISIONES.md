@@ -30,7 +30,7 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 
 **Contexto:** para evitar la fuga de información, hay que saber cuándo llegó cada dato, y una corrección no puede borrar lo que se conocía antes.
 
-**Decisión:** cada archivo se llama `data/bandeja/<fuente>/<fecha_dato>__<fecha_entrega>.csv`. Una corrección es un archivo nuevo con la misma fecha del dato y una entrega posterior. Para cada fecha del dato rige la última versión entregada hasta la fecha de corte, que reemplaza a las anteriores.
+**Decisión:** cada archivo se llama `data/bandeja/<fuente>/<fecha_dato>__<fecha_entrega>.csv`. Una corrección es un archivo nuevo con la misma fecha del dato y una entrega posterior, y solo rige desde esa entrega. Las versiones se aplican en orden de entrega, según D-010.
 
 **Alternativas:**
 
@@ -41,8 +41,6 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 | Sobrescribir el archivo al corregirlo | Pierde lo que se conocía antes y modifica lo ya entregado |
 
 **Justificación:** el nombre no se pierde al copiar el archivo, y permite saber qué se conocía en cualquier fecha sin abrirlo.
-
-**Pendiente:** definir en la ingesta si una corrección puede traer solo las filas corregidas.
 
 ## D-003: disponibilidad de cada fuente
 
@@ -97,3 +95,57 @@ Cada decisión registra su contexto, las alternativas consideradas y su justific
 **Justificación:** separar por fecha de llegada, y no por fecha del dato, aplica la misma regla a la carga histórica. Quedan unas 19 semanas de fechas de corte para el seguimiento y más de cuatro años para entrenar.
 
 **Alternativas:** un corte más tardío deja menos semanas de seguimiento, y uno más temprano reduce el entrenamiento.
+
+## D-007: frontera entre dato inválido y situación esperada
+
+**Fecha:** 2026-11-01
+
+**Contexto:** el enunciado exige detener los datos inválidos sin que las situaciones esperadas provoquen fallas. Las reglas se contrastaron con los datos reales, que no tienen claves duplicadas, ventas negativas ni tiendas fuera del catálogo.
+
+**Decisión:**
+
+| Tratamiento | Situaciones |
+|---|---|
+| Inválido: se detiene | CSV ilegible; columnas incorrectas; tipos que no se pueden interpretar; valores obligatorios vacíos; fecha distinta a la del nombre del archivo; entrega anterior al dato, salvo en fuentes con anticipación; valores negativos; misma clave con valores distintos; tienda fuera del catálogo; nombre fuera de la convención |
+| Aviso: se conserva | Filas duplicadas exactas, de las que queda una; familia nueva; archivo incompleto; venta mayor que 100 veces la mediana de su serie |
+| Esperado: sin aviso | Fuente que aún no llega; fin de semana sin `oil`; 25 de diciembre sin datos; venta 0; precio de `oil` vacío; día sin eventos |
+
+**Justificación de los casos discutibles:**
+- **Venta muy alta:** hay 33 ventas de más de 100 veces su mediana en los datos originales. Detenerlas rechazaría picos reales. El costo aceptado es que un error de captura solo genere un aviso. El umbral está en `config/fuentes.yaml`.
+- **Archivo incompleto:** no se inventan ceros, porque una fila ausente es un dato desconocido y no una venta nula.
+- **Tienda nueva:** es inválida hasta que llegue el catálogo actualizado, porque no se puede asociar a su ciudad, tipo ni grupo.
+- **Familia nueva:** se conserva, porque no rompe ningún catálogo. El modelo deberá tratarla como desconocida.
+
+**Alternativas:** detener también las ventas muy altas, o tratar como aviso los valores negativos. La primera rechaza datos reales; la segunda deja pasar datos sin sentido de negocio.
+
+## D-008: cuarentena del archivo completo
+
+**Fecha:** 2026-11-01
+
+**Decisión:** un archivo con cualquier dato inválido no se usa, se registra con su motivo en el reporte de ingesta y el proceso continúa. El archivo permanece en la bandeja, porque esta nunca se modifica. Si la carga histórica falta o es inválida, el proceso sí falla, porque no hay base con la cual operar.
+
+**Alternativas:** rechazar solo las filas inválidas es más fino, pero puede dejar un día a medias sin que se note. Fallar toda la ejecución dejaría sin pedido sugerido a todas las tiendas por un solo archivo.
+
+**Costo aceptado:** un error en una fila descarta las filas correctas de ese archivo hasta que llegue una corrección.
+
+## D-009: publicar con lo disponible
+
+**Fecha:** 2026-11-01
+
+**Decisión:** si una fuente se atrasa, el producto publica igual e informa la última fecha conocida de cada fuente. La ingesta ya entrega esa fecha en su reporte.
+
+**Alternativa:** no publicar si las ventas tienen demasiados días de atraso. Evita pedidos con datos viejos, pero una fuente retrasada dejaría a la tienda sin recomendación.
+
+**Pendiente:** evaluar un límite de antigüedad cuando exista el pronóstico.
+
+## D-010: correcciones por clave
+
+**Fecha:** 2026-11-01
+
+**Contexto:** no se sabe si una corrección llegará con el archivo completo o solo con las filas corregidas.
+
+**Decisión:** la ingesta parte de la carga histórica y aplica en orden de entrega cada archivo válido. Cada fila reemplaza a la anterior con la misma clave. También se pueden corregir fechas de la carga histórica.
+
+**Alternativa:** reemplazar toda la fecha. Es más simple, pero una corrección parcial borraría el resto del día.
+
+**Costo aceptado:** una corrección no puede eliminar una fila, solo cambiar sus valores.
