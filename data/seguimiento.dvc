@@ -1,0 +1,6 @@
+outs:
+- md5: 673f039093d03f499fc7859d51942022.dir
+  size: 8854
+  nfiles: 3
+  hash: md5
+  path: seguimiento

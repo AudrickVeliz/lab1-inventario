@@ -1,0 +1,6 @@
+outs:
+- md5: f573354cf9a8df09bd61536c358b5294.dir
+  size: 25636389
+  nfiles: 60
+  hash: md5
+  path: publicados

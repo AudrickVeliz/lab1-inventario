@@ -15,7 +15,7 @@ Necesitas Docker o Podman, con al menos 4 GB de memoria disponibles.
 
    Con Podman, el comando es `podman compose up -d`. El archivo es el mismo y no necesita cambios.
 
-No hace falta nada más. En un máximo de 5 minutos, el DAG `reposicion` arranca solo, genera la bandeja y procesa todos los cortes. Con los datos completos de Kaggle tarda unos minutos y produce 20 cortes, del 2017-04-03 al 2017-08-14.
+No hace falta nada más. En un máximo de 5 minutos, el DAG `reposicion` arranca solo, genera la bandeja y procesa todos los cortes. Con los datos completos de Kaggle tarda unos 22 minutos en una laptop y produce 20 cortes, del 2017-04-03 al 2017-08-14.
 
 La interfaz queda en <http://localhost:8080>, con el usuario `airflow` y la contraseña `airflow`.
 
@@ -89,6 +89,63 @@ docker compose exec airflow-scheduler python -m inventario.publicacion --corte 2
 ```
 
 Agrega `--conocimiento <fecha>` para reproducir una versión posterior a la original.
+
+## Evidencia de funcionamiento
+
+Corrida completa con los datos de Kaggle, en una laptop con Podman, sin disparar nada a mano: 5 entrenamientos y 20 cortes en unos 22 minutos.
+
+### Ejecuciones en Airflow
+
+![DAGs activos](docs/evidencia/airflow-dags.png)
+
+La ejecución de 22 minutos procesó todo. Las siguientes aparecen como omitidas porque no llegó nada nuevo.
+
+![Tareas de cada ejecución](docs/evidencia/airflow-ejecuciones.png)
+
+Cada corte se publica como una instancia identificada por corte y conocimiento.
+
+![Publicaciones por corte](docs/evidencia/airflow-cortes.png)
+
+### Comparación de modelos
+
+Resultado en el periodo de seguimiento, con 19 cortes de semana completa que no se usaron para elegir el modelo:
+
+| Métrica | Publicado | Baseline con los mismos datos | Cortes donde gana lo publicado |
+|---|---|---|---|
+| WAPE del cuantil 0.50 | 0.140 | 0.150 | 12 de 19 |
+| Cobertura del intervalo 0.10 a 0.90 (ideal 80%) | 76.9% | 70.9% | 19 de 19 |
+| Costo de negocio | 17,046,687 (-2.0%) | 17,401,970 | 9 de 19 |
+
+El modelo mejora con claridad la precisión y la cobertura. **La mejora en costo no es concluyente:** sin el corte del 2017-05-29, el modelo cuesta 0.2% más. Los costos son además supuestos del producto (`DECISIONES.md`, D-023).
+
+- **Por corte y decisiones de modelo:** [`docs/evidencia/reporte-seguimiento.md`](docs/evidencia/reporte-seguimiento.md)
+- **Comparación en cada entrenamiento:** [`docs/evidencia/comparacion-modelos.csv`](docs/evidencia/comparacion-modelos.csv)
+
+### Reproducción de un pronóstico pasado con DVC
+
+Desde un clon limpio, con DVC instalado (`pip install dvc==3.67.1`) y la imagen ya construida. El remoto es una carpeta que no va en Git, así que hay que colocarla junto al clon. Los comandos usan Podman; con Docker son equivalentes.
+
+```
+git clone https://github.com/AudrickVeliz/lab1-inventario.git
+cd lab1-inventario
+cp -r <proyecto-original>/dvc-remote dvc-remote
+dvc pull data/historico.dvc data/bandeja.dvc data/modelos.dvc data/publicados.dvc
+podman run --rm --entrypoint python -e PYTHONPATH=/opt/rep/src -v "$(pwd)":/opt/rep \
+  inventario-airflow:3.3.2 -m inventario.publicacion --corte 2017-06-05 --raiz /opt/rep
+```
+
+Resultados obtenidos:
+
+```
+500 files fetched and 496 files added
+publicaciones 20 | modelos 5
+
+modelo: idéntico pronostico.csv: idéntico pedido.csv: idéntico  <- 2017-04-03
+modelo: idéntico pronostico.csv: idéntico pedido.csv: idéntico  <- 2017-06-05
+modelo: idéntico pronostico.csv: idéntico pedido.csv: idéntico  <- 2017-08-07
+```
+
+Fuera del contenedor, `pedido.csv` también es idéntico. En Windows, `pronostico.csv` difiere hasta en 5e-12 por el redondeo de punto flotante, por lo que la comparación byte a byte requiere el mismo entorno.
 
 ## Desarrollo
 

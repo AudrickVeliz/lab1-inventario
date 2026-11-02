@@ -38,6 +38,7 @@ airflow.cfg
 # Sistema y editores
 .DS_Store
 Thumbs.db
+desktop.ini
 .vscode/
 .idea/
 
